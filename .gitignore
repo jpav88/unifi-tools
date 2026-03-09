@@ -1,0 +1,24 @@
+# Auth / secrets
+/tmp/unifi_cookies.txt
+*.cookies
+.env
+
+# Local device config (MACs, IPs — not for public repo)
+/local/*
+!/local/devices.sh.example
+
+# Snapshots (contain device-specific data, regenerated per session)
+/snapshots/
+
+# Screenshots
+/Tmpscreenshots/
+
+# Debug output (regenerated per session)
+/debug/
+
+# Claude internals (except skills which are project config)
+.claude/*
+!.claude/skills/
+
+# OS
+.DS_Store
