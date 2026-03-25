@@ -205,8 +205,8 @@ cat > "$DEVICES_FILE" << EOF
 # Edit this file to update device MACs or AP mappings
 
 # iPad MACs (Fixed private address per SSID)
-IPAD_FISH_TANK="${ipad_ft}"
-IPAD_FISH_TANK2="${ipad_ft2}"
+IPAD_PRIMARY="${ipad_ft}"
+IPAD_SECONDARY="${ipad_ft2}"
 
 # AP MAC → friendly name mapping
 # Format: MAC|Name|Location

@@ -15,7 +15,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd /path/to/unifi && source local/devices.sh && echo \"CRITICAL STATE — preserve through compaction:\n- iPad fish_tank MAC: $IPAD_FISH_TANK | fish_tank2 MAC: $IPAD_FISH_TANK2\n- Scripts in scripts/ dir, skills in .claude/skills/\n- Use /unifi-status, /unifi-debug, /unifi-find-ipad, /unifi-ap-health, /unifi-client-history\"\n"
+            "command": "cd /path/to/unifi && source local/devices.sh && echo \"CRITICAL STATE — preserve through compaction:\n- iPad my_network MAC: $IPAD_PRIMARY | my_network_iot MAC: $IPAD_SECONDARY\n- Scripts in scripts/ dir, skills in .claude/skills/\n- Use /unifi-status, /unifi-debug, /unifi-find-ipad, /unifi-ap-health, /unifi-client-history\"\n"
           }
         ]
       }

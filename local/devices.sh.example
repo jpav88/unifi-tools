@@ -4,8 +4,8 @@
 # Source this file in scripts/skills that need device-specific MACs or AP mappings
 
 # iPad MACs (Fixed private address per SSID)
-IPAD_FISH_TANK="xx:xx:xx:xx:xx:xx"
-IPAD_FISH_TANK2="xx:xx:xx:xx:xx:xx"
+IPAD_PRIMARY="xx:xx:xx:xx:xx:xx"
+IPAD_SECONDARY="xx:xx:xx:xx:xx:xx"
 
 # AP MAC → friendly name mapping (for skill context)
 # Format: MAC|Name|Location

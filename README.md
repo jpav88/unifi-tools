@@ -92,6 +92,10 @@ All device-specific data lives in two files (both gitignored):
 
 Scripts, skills, and hooks all source these files at runtime. See `local/devices.sh.example` for the template.
 
+## Documentation
+
+- **[Apple Wi-Fi Best Practices](docs/apple-wifi-best-practices.md)** — Recommended UniFi settings for iPhones, iPads, and Macs. Covers roaming, 802.11k/v/r, private MAC addresses, min_rssi tuning, and common issues.
+
 ## UDR Certificate (iOS/macOS)
 
 To fix Safari "Connection Not Private" warnings for your controller:

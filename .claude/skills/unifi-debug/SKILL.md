@@ -20,7 +20,7 @@ context: fork
 !`./scripts/unifi_devices.sh`
 
 ## Known Devices
-!`source local/devices.sh && echo "iPad fish_tank MAC: $IPAD_FISH_TANK" && echo "iPad fish_tank2 MAC: $IPAD_FISH_TANK2" && echo "" && echo "APs:" && ap_list`
+!`source local/devices.sh && echo "iPad my_network MAC: $IPAD_PRIMARY" && echo "iPad my_network_iot MAC: $IPAD_SECONDARY" && echo "" && echo "APs:" && ap_list`
 
 ## Instructions
 Analyze the data above and provide a connectivity diagnosis:

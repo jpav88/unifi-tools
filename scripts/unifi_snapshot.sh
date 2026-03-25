@@ -26,7 +26,7 @@ DEVICES=$(unifi_get "stat/device" 2>/dev/null || echo '{"data":[]}')
 CLIENTS=$(unifi_get "stat/sta" 2>/dev/null || echo '{"data":[]}')
 
 # Extract iPad state
-IPAD=$(echo "$CLIENTS" | jq --arg mac "$IPAD_FISH_TANK" --arg mac2 "$IPAD_FISH_TANK2" '
+IPAD=$(echo "$CLIENTS" | jq --arg mac "$IPAD_PRIMARY" --arg mac2 "$IPAD_SECONDARY" '
     [.data[] | select(.mac == $mac or .mac == $mac2) | {
         mac, ip, essid, ap_mac, channel,
         radio: .radio,
@@ -60,7 +60,7 @@ AP_CONFIGS=$(echo "$DEVICES" | jq '
 # iPad session history (last 24h)
 SESSION_END=$(date +%s)
 SESSION_START=$((SESSION_END - 24 * 3600))
-IPAD_SESSIONS=$(unifi_get "stat/session?type=all&start=${SESSION_START}&end=${SESSION_END}&mac=${IPAD_FISH_TANK}" 2>/dev/null | jq '
+IPAD_SESSIONS=$(unifi_get "stat/session?type=all&start=${SESSION_START}&end=${SESSION_END}&mac=${IPAD_PRIMARY}" 2>/dev/null | jq '
     [.data[] | {
         start: (.assoc_time | todate),
         end: ((.assoc_time + .duration) | todate),

@@ -17,7 +17,7 @@ context: fork
 !`source local/devices.sh && ap_list`
 
 ## Known iPad MACs
-!`source local/devices.sh && echo "fish_tank: $IPAD_FISH_TANK" && echo "fish_tank2: $IPAD_FISH_TANK2"`
+!`source local/devices.sh && echo "my_network: $IPAD_PRIMARY" && echo "my_network_iot: $IPAD_SECONDARY"`
 
 ## Instructions
 Build a chronological session timeline:
