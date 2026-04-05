@@ -18,6 +18,7 @@ fi
 UNIFI_HOST="${UNIFI_HOST:-192.168.1.1}"
 UNIFI_USER="${UNIFI_USER:-admin}"
 UNIFI_BASE="https://${UNIFI_HOST}/proxy/network/api/s/default"
+UNIFI_BASE_V2="https://${UNIFI_HOST}/proxy/network/v2/api/site/default"
 if [[ -z "${UNIFI_PASS:-}" ]]; then
     echo "ERROR: UNIFI_PASS not set. Export it or create ~/.unifi_credentials" >&2
     return 1 2>/dev/null || exit 1
@@ -101,6 +102,31 @@ _unifi_request() {
 unifi_get()  { _unifi_request GET  "$1"; }
 unifi_post() { _unifi_request POST "$1" "$2"; }
 unifi_put()  { _unifi_request PUT  "$1" "$2"; }
+
+# v2 API — uses /v2/api/site/{site}/ base path
+_unifi_request_v2() {
+    local method="$1" path="$2" data="${3:-}"
+    local curl_args=(-sk -w '\n%{http_code}' -b "$UNIFI_COOKIE_FILE"
+        -H "X-Csrf-Token: ${UNIFI_CSRF}")
+
+    if [[ "$method" != "GET" ]]; then
+        curl_args+=(-X "$method" -H "Content-Type: application/json" -d "$data")
+    fi
+
+    local response http_code body
+    response=$(curl "${curl_args[@]}" "${UNIFI_BASE_V2}/${path}" 2>/dev/null)
+    http_code="${response##*$'\n'}"
+    body="${response%$'\n'*}"
+
+    if [[ "$http_code" != "200" ]]; then
+        echo "{\"error\": \"HTTP ${http_code} on ${method} v2/${path}\"}" >&2
+        return 1
+    fi
+    echo "$body"
+}
+
+unifi_get_v2()  { _unifi_request_v2 GET  "$1"; }
+unifi_post_v2() { _unifi_request_v2 POST "$1" "$2"; }
 
 unifi_logout() {
     curl -sk -X POST "https://${UNIFI_HOST}/api/auth/logout" \

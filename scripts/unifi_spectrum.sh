@@ -1,0 +1,88 @@
+#!/bin/bash
+set -euo pipefail
+# Spectrum scan — show RF environment from an AP's perspective
+# Usage: ./unifi_spectrum.sh <mac> [band] [width]
+#   mac: AP MAC address
+#   band: ng (2.4GHz), na (5GHz), 6e (default: all)
+#   width: 20, 40, 80, 160, 320 (default: 20 for primary channel view)
+#
+# Data comes from the controller's cached spectrum scans (runs periodically).
+# To trigger a fresh scan, use the UI's RF Scan feature.
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/unifi_auth.sh"
+
+MAC="${1:-}"
+BAND="${2:-all}"
+WIDTH="${3:-20}"
+
+if [[ -z "$MAC" ]]; then
+    echo "Usage: $0 <ap_mac> [ng|na|6e|all] [width]" >&2
+    echo "  Shows cached RF spectrum scan data for each radio." >&2
+    echo "  Default: all bands, 20MHz channels" >&2
+    exit 1
+fi
+
+validate_mac "$MAC" || exit 1
+NORM_MAC=$(normalize_mac "$MAC")
+
+unifi_init
+
+# Resolve AP name
+AP_NAME=$(unifi_get "stat/device" | jq -r --arg mac "$NORM_MAC" \
+    '.data[] | select(.mac == $mac) | .name // .mac')
+if [[ -z "$AP_NAME" || "$AP_NAME" == "null" ]]; then
+    echo "ERROR: AP $MAC not found" >&2
+    unifi_logout
+    exit 1
+fi
+
+RESULT=$(unifi_get "stat/spectrum-scan/${NORM_MAC}" 2>/dev/null) || true
+
+if [[ -z "$RESULT" ]] || ! echo "$RESULT" | jq -e '.data[0].scans' >/dev/null 2>&1; then
+    echo "ERROR: No spectrum data available for ${AP_NAME}" >&2
+    unifi_logout
+    exit 1
+fi
+
+echo "$RESULT" | jq --arg ap "$AP_NAME" --arg band "$BAND" --argjson width "$WIDTH" '
+    .data[0] as $d |
+    {
+        ap: $ap,
+        mac: $d.mac,
+        scanning: $d.spectrum_scanning,
+        scan_time: ($d.scans[0].spectrum_table_time | strftime("%Y-%m-%dT%H:%M:%SZ")),
+        radios: [
+            $d.scans[] |
+            select($band == "all" or .radio == $band) |
+            {
+                radio: .radio,
+                radio_name: (if .radio == "ng" then "2.4GHz"
+                            elif .radio == "na" then "5GHz"
+                            elif .radio == "6e" then "6GHz"
+                            else .radio end),
+                channels: [
+                    .spectrum_table[] |
+                    select(.width == $width) |
+                    {
+                        channel,
+                        freq_mhz: .center_freq,
+                        interference_dbm: .interference,
+                        utilization_pct: .utilization,
+                        radar: (if (.interference_type | length) > 0 then .interference_type else null end)
+                    }
+                ] | sort_by(.channel),
+                best_channels: ([
+                    .spectrum_table[] |
+                    select(.width == $width) |
+                    {channel, score: (.utilization + (if .interference > -90 then 10 else 0 end))}
+                ] | sort_by(.score) | .[0:3] | [.[].channel]),
+                worst_channels: ([
+                    .spectrum_table[] |
+                    select(.width == $width) |
+                    {channel, score: (.utilization + (if .interference > -90 then 10 else 0 end))}
+                ] | sort_by(-.score) | .[0:3] | [.[].channel])
+            }
+        ]
+    }'
+
+unifi_logout

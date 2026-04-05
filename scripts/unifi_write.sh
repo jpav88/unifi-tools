@@ -1,25 +1,49 @@
 #!/bin/bash
 set -euo pipefail
-# Write operations — reboot, block, kick, update radio, min_rssi
+# Write operations for UniFi devices and clients
 # Usage: ./unifi_write.sh <command> <mac> [extra_args]
 #
 # Commands:
-#   reboot <mac>                        — reboot a device
-#   provision <mac>                     — force provision a device
-#   kick <mac>                          — disconnect a client
-#   block <mac>                         — block a client
-#   unblock <mac>                       — unblock a client
-#   radio <device_id> <json>            — update device radio_table (PUT rest/device/<id>)
-#   min_rssi <device_mac> <radio> <val> — set min_rssi on a radio (e.g. na -72, or na off)
+#   reboot <mac>                        — reboot a device (AP, switch, gateway)
+#   provision <mac>                     — force re-provision a device
+#   kick <mac>                          — disconnect a Wi-Fi client (forces reconnect)
+#   block <mac>                         — block a client from the network
+#   unblock <mac>                       — unblock a previously blocked client
+#   rename <mac> <name>                 — set/change a client's display name
+#   poe_cycle <switch_mac> <port>       — power-cycle a PoE switch port (remotely reboot an AP)
+#   min_rssi <ap_mac> <band> <dBm|off>  — set minimum signal threshold on an AP radio
+#   radio <device_id> <json>            — raw radio_table update (advanced)
+#
+# Examples:
+#   ./unifi_write.sh reboot aa:bb:cc:dd:ee:ff
+#   ./unifi_write.sh kick aa:bb:cc:dd:ee:ff
+#   ./unifi_write.sh rename aa:bb:cc:dd:ee:ff "Living Room TV"
+#   ./unifi_write.sh poe_cycle aa:bb:cc:dd:ee:ff 2
+#   ./unifi_write.sh min_rssi aa:bb:cc:dd:ee:ff na -75
+#   ./unifi_write.sh min_rssi aa:bb:cc:dd:ee:ff na off
+#
+# Radio bands: ng = 2.4GHz, na = 5GHz, 6e = 6GHz
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/unifi_auth.sh"
 
 CMD="${1:-}"
 ARG="${2:-}"
 
-if [[ -z "$CMD" || -z "$ARG" ]]; then
+if [[ -z "$CMD" || -z "$ARG" || "$CMD" == "--help" || "$CMD" == "-h" ]]; then
     echo "Usage: $0 <command> <mac> [extra_args]" >&2
-    echo "Commands: reboot, provision, kick, block, unblock, radio, min_rssi" >&2
+    echo "" >&2
+    echo "Commands:" >&2
+    echo "  reboot <mac>                       Reboot a device" >&2
+    echo "  provision <mac>                    Force re-provision a device" >&2
+    echo "  kick <mac>                         Disconnect a client" >&2
+    echo "  block <mac>                        Block a client" >&2
+    echo "  unblock <mac>                      Unblock a client" >&2
+    echo "  rename <mac> <name>                Set client display name" >&2
+    echo "  poe_cycle <switch_mac> <port>      Power-cycle a PoE port" >&2
+    echo "  min_rssi <ap_mac> <band> <dBm|off> Set min signal threshold" >&2
+    echo "  radio <device_id> <json>           Raw radio_table update" >&2
+    echo "" >&2
+    echo "Bands: ng = 2.4GHz, na = 5GHz, 6e = 6GHz" >&2
     exit 1
 fi
 
@@ -36,7 +60,46 @@ _resolve_cmd() {
 
 unifi_init
 
-if [[ "$CMD" == "min_rssi" ]]; then
+if [[ "$CMD" == "rename" ]]; then
+    # rename <mac> <name> — set client alias via upd/user (partial update, no 403)
+    validate_mac "$ARG" || exit 1
+    NEW_NAME="${3:-}"
+    if [[ -z "$NEW_NAME" ]]; then
+        echo "Usage: $0 rename <mac> <name>" >&2
+        exit 1
+    fi
+
+    # Resolve client _id from MAC
+    CLIENT_ID=$(unifi_get "stat/alluser" | jq -r --arg mac "$(normalize_mac "$ARG")" \
+        '.data[] | select(.mac == $mac) | ._id' | head -1)
+    if [[ -z "$CLIENT_ID" || "$CLIENT_ID" == "null" ]]; then
+        echo "ERROR: Client $ARG not found" >&2
+        exit 1
+    fi
+
+    echo "Renaming client $ARG → \"${NEW_NAME}\" (_id: ${CLIENT_ID})"
+    unifi_put "upd/user/${CLIENT_ID}" "$(jq -n --arg n "$NEW_NAME" '{name: $n}')" | jq '.meta'
+
+elif [[ "$CMD" == "poe_cycle" ]]; then
+    # poe_cycle <switch_mac> <port_idx> — power-cycle a PoE port
+    validate_mac "$ARG" || exit 1
+    PORT_IDX="${3:-}"
+    if [[ -z "$PORT_IDX" ]]; then
+        echo "Usage: $0 poe_cycle <switch_mac> <port_idx>" >&2
+        exit 1
+    fi
+    # Resolve switch name for confirmation
+    SW_NAME=$(unifi_get "stat/device" | jq -r --arg mac "$(normalize_mac "$ARG")" \
+        '.data[] | select(.mac == $mac) | .name // .mac')
+    if [[ -z "$SW_NAME" || "$SW_NAME" == "null" ]]; then
+        echo "ERROR: Switch $ARG not found" >&2
+        exit 1
+    fi
+    echo "Power-cycling ${SW_NAME} port ${PORT_IDX}"
+    unifi_post "cmd/devmgr" "$(jq -n --arg mac "$(normalize_mac "$ARG")" --argjson port "$PORT_IDX" \
+        '{cmd: "power-cycle", mac: $mac, port_idx: $port}')" | jq '.meta'
+
+elif [[ "$CMD" == "min_rssi" ]]; then
     # min_rssi <device_mac> <radio> <value|off>
     # Fetches current radio_table, modifies the target radio, PUTs it back
     validate_mac "$ARG" || exit 1
@@ -50,7 +113,7 @@ if [[ "$CMD" == "min_rssi" ]]; then
     fi
 
     # Resolve device _id and get radio_table
-    DEVICE_JSON=$(unifi_get "stat/device" | jq --arg mac "$ARG" '.data[] | select(.mac == $mac)')
+    DEVICE_JSON=$(unifi_get "stat/device" | jq --arg mac "$(normalize_mac "$ARG")" '.data[] | select(.mac == $mac)')
     if [[ -z "$DEVICE_JSON" || "$DEVICE_JSON" == "null" ]]; then
         echo "ERROR: Device $ARG not found" >&2
         exit 1
@@ -86,7 +149,7 @@ elif resolved=$(_resolve_cmd "$CMD"); then
         '{cmd: $cmd, mac: $mac}')" | jq '.meta'
 else
     echo "Unknown command: $CMD" >&2
-    echo "Commands: reboot, provision, kick, block, unblock, radio, min_rssi" >&2
+    echo "Commands: reboot, provision, kick, block, unblock, rename, poe_cycle, radio, min_rssi" >&2
     exit 1
 fi
 

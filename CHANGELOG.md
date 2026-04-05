@@ -2,6 +2,24 @@
 
 All notable changes to the UniFi network configuration are documented here.
 
+## [2026-04-04]
+
+### Added
+- **v2 API support** in `unifi_auth.sh` — new base path and `unifi_get_v2`/`unifi_post_v2` helpers
+- **`unifi_ap_stats.sh`** — historical per-AP client counts and traffic (5min/hourly/daily). Summary by default, `--timeline` for full detail.
+- **`unifi_spectrum.sh`** — RF spectrum scan viewer with best/worst channel recommendations per radio
+- **`unifi_write.sh rename`** — set client display name via `upd/user` partial update (avoids 403 on `rest/user`)
+- **`unifi_write.sh poe_cycle`** — remotely power-cycle a PoE switch port to reboot an AP
+- **[UniFi API Reference](docs/unifi-api-reference.md)** — comprehensive v1+v2 API guide with curl examples and known gotchas
+
+### Changed
+- **`unifi_events.sh`** — rewired to use v2 `system-log` API (replaces broken v1 `stat/event`). Auto-falls back to v1 if v2 unavailable.
+- **`unifi_clients.sh`** — AP MACs now resolve to device names; radio codes show as "5GHz"/"2.4GHz"/"6GHz"
+- **`unifi_sessions.sh`** — AP MACs resolve to device names in session and roaming history
+- **`unifi_devices.sh`** — added human-readable band names alongside radio codes
+- **`unifi_write.sh`** — improved help with examples, added `--help` flag, fixed min_rssi MAC normalization bug
+- **U7 Pro Outdoor** 6E radio: `auto` → `ch37` fixed — stops daily channel hopping noise in event log
+
 ## [2026-03-24]
 
 ### Changed

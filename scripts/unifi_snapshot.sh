@@ -57,6 +57,19 @@ AP_CONFIGS=$(echo "$DEVICES" | jq '
         }]
     }]')
 
+# Extract switch port states
+SWITCHES=$(echo "$DEVICES" | jq '
+    [.data[] | select(.type == "usw") | {
+        name, mac, model,
+        state: (if .state == 1 then "online" else "offline" end),
+        ports: [.port_table[]? | {
+            port_idx, name, up, speed,
+            poe_enable,
+            poe_power: (.poe_power // null),
+            media
+        }]
+    }]')
+
 # iPad session history (last 24h)
 SESSION_END=$(date +%s)
 SESSION_START=$((SESSION_END - 24 * 3600))
@@ -81,6 +94,10 @@ WIFI_CLIENTS=$(echo "$CLIENTS" | jq '[.data[] | select(.is_wired == false)] | le
 AP_ONLINE=$(echo "$DEVICES" | jq '[.data[] | select((.type == "uap" or .type == "udm") and .state == 1)] | length')
 AP_TOTAL=$(echo "$DEVICES" | jq '[.data[] | select(.type == "uap" or .type == "udm")] | length')
 
+# Switch summary counts
+SW_TOTAL=$(echo "$SWITCHES" | jq 'length')
+SW_PORTS_UP=$(echo "$SWITCHES" | jq '[.[].ports[] | select(.up == true)] | length')
+
 # Build snapshot
 jq -n \
     --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
@@ -90,18 +107,34 @@ jq -n \
     --argjson ap_tot "$AP_TOTAL" \
     --argjson ipad "$IPAD" \
     --argjson aps "$AP_CONFIGS" \
+    --argjson sws "$SWITCHES" \
     --argjson sessions "$IPAD_SESSIONS" \
     '{
         timestamp: $ts,
         network: { wlan_status: $wlan, wifi_clients: $wifi, aps_online: $ap_on, aps_total: $ap_tot },
         ipad: $ipad,
         ipad_sessions_24h: $sessions,
-        access_points: $aps
+        access_points: $aps,
+        switches: $sws
     }' > "$OUTFILE"
 
 # Output 1-line summary for SessionStart hook
 IPAD_AP=$(echo "$IPAD" | jq -r '.[0].ap_mac // "disconnected"')
 IPAD_SIG=$(echo "$IPAD" | jq -r '.[0].signal // "n/a"')
-echo "Network: ${WLAN_STATUS}, ${WIFI_CLIENTS} wifi clients, ${AP_ONLINE}/${AP_TOTAL} APs online | iPad: ${IPAD_AP} (${IPAD_SIG} dBm) | Snapshot: snapshots/session_baseline.json"
+
+# Build switch port alert (flag any non-1G links or down ports with PoE devices)
+SW_ALERTS=$(echo "$SWITCHES" | jq -r '
+    [.[] | .name as $sw | .ports[] |
+        select(.up == true and .speed < 1000) |
+        "\($sw) P\(.port_idx):\(.speed)M"
+    ] | if length > 0 then "⚠️  " + join(", ") else "" end')
+
+SW_BRIEF="${SW_TOTAL} switches, ${SW_PORTS_UP} ports up"
+
+SUMMARY="Network: ${WLAN_STATUS}, ${WIFI_CLIENTS} wifi clients, ${AP_ONLINE}/${AP_TOTAL} APs online, ${SW_BRIEF} | iPad: ${IPAD_AP} (${IPAD_SIG} dBm)"
+if [[ -n "$SW_ALERTS" ]]; then
+    SUMMARY="${SUMMARY} | ${SW_ALERTS}"
+fi
+echo "${SUMMARY} | Snapshot: snapshots/session_baseline.json"
 
 unifi_logout
