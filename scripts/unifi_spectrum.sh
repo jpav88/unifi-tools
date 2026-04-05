@@ -8,9 +8,10 @@ set -euo pipefail
 #
 # Spectrum data availability depends on AP model:
 #   Dedicated scanning radio (U7 Pro Max, U7 Pro XGS, E7): continuous background data
-#   All other APs: data only appears after a manual scan via the UI
+#   All other APs: data only appears after a scan is triggered
+#     The script tries the API trigger first. If that fails, use the UI:
 #     (Devices > AP > Insights > RF Environment > Scan)
-#     WARNING: Manual scans take the AP offline briefly — run during off-hours
+#     WARNING: Scans briefly take the AP offline — run during off-hours
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/unifi_auth.sh"
 
@@ -52,13 +53,33 @@ fi
 # Check if spectrum_table is actually populated
 ENTRY_COUNT=$(echo "$RESULT" | jq '[.data[0].scans[].spectrum_table | length] | add')
 if [[ "$ENTRY_COUNT" -eq 0 ]]; then
-    echo "ERROR: ${AP_NAME} has scan structure but no spectrum data collected yet." >&2
-    echo "  Trigger a scan in the UniFi UI: Devices > ${AP_NAME} > Insights > RF Environment > Scan" >&2
-    echo "  Note: Only U7 Pro Max, U7 Pro XGS, E7/E7 Campus have dedicated scanning radios" >&2
-    echo "  that collect data continuously. All other APs need a manual UI-triggered scan." >&2
-    echo "  WARNING: Manual scans briefly take the AP offline." >&2
-    unifi_logout
-    exit 1
+    # Try to trigger a scan via API (works on some models, returns 400 on others)
+    echo "${AP_NAME}: no cached data — attempting API scan trigger..." >&2
+    TRIGGER=$(unifi_post "cmd/devmgr" "$(jq -n --arg mac "$NORM_MAC" \
+        '{cmd: "spectrum-scan", mac: $mac}')" 2>/dev/null) || true
+    TRIGGER_RC=$(echo "$TRIGGER" | jq -r '.meta.rc // "error"' 2>/dev/null)
+
+    if [[ "$TRIGGER_RC" == "ok" ]]; then
+        echo "${AP_NAME}: scan triggered — waiting 45s for results..." >&2
+        echo "  WARNING: AP is offline during scan." >&2
+        sleep 45
+        RESULT=$(unifi_get "stat/spectrum-scan/${NORM_MAC}" 2>/dev/null) || true
+        ENTRY_COUNT=$(echo "$RESULT" | jq '[.data[0].scans[].spectrum_table | length] | add' 2>/dev/null)
+        if [[ "$ENTRY_COUNT" -eq 0 || -z "$ENTRY_COUNT" ]]; then
+            echo "ERROR: Scan completed but no data returned. Try the UI instead:" >&2
+            echo "  Devices > ${AP_NAME} > Insights > RF Environment > Scan" >&2
+            unifi_logout
+            exit 1
+        fi
+        echo "${AP_NAME}: scan complete." >&2
+    else
+        echo "ERROR: API trigger failed for ${AP_NAME}. Trigger via UniFi UI instead:" >&2
+        echo "  Devices > ${AP_NAME} > Insights > RF Environment > Scan" >&2
+        echo "  Note: Only U7 Pro Max, U7 Pro XGS, E7/E7 Campus have dedicated scanning" >&2
+        echo "  radios. All other APs need a triggered scan (AP goes offline briefly)." >&2
+        unifi_logout
+        exit 1
+    fi
 fi
 
 echo "$RESULT" | jq --arg ap "$AP_NAME" --arg band "$BAND" --argjson width "$WIDTH" '
