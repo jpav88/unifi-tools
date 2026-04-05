@@ -583,7 +583,13 @@ The response contains per-radio spectrum data grouped by channel width:
 
 Each radio (2.4 GHz, 5 GHz, 6 GHz) has its own scan entry with its own `spectrum_table`.
 
-> **Note:** Not all AP models support spectrum scanning. The trigger endpoint (`cmd/devmgr` with `spectrum-scan`) may return 400 on some models/firmware, but cached data from automatic scans is often still available.
+> **Important — Three tiers of scanning capability:**
+>
+> **Dedicated scanning radio** (U7 Pro Max, U7 Pro XGS, E7, E7 Campus): These APs have a separate 4th radio chip for continuous background spectrum analysis. Data should populate automatically. Requires Network Application 8.2.93+. However, this feature is still maturing — some users report empty data even on supported models. A UI-triggered scan may be needed to seed initial data.
+>
+> **Software-based scan** (U7 Pro, U7 Pro Outdoor, U6+, U6 Pro, U6 Enterprise, NanoHD, UDM, and most other APs): The `spectrum_table` array is **empty by default**. Data only appears after triggering a scan through the UI: **Devices > [AP] > Insights > RF Environment > Scan**. The AP **stops serving clients during the scan** — run it during off-hours. The API trigger endpoint (`cmd/devmgr` with `spectrum-scan`) returns 400 on some firmware; use the UI instead.
+>
+> **Unsupported:** Very old models (UAP-AC-Lite and earlier) may not support scanning at all.
 
 ---
 
@@ -718,6 +724,7 @@ A collection of undocumented behaviors that will save you hours of debugging:
 | **tx_power "medium" varies by model** | A U6+ at "medium" = ~6 dBm. A UDM at "high" = ~26 dBm. Always verify actual output. |
 | **Newly adopted APs ignore API radio changes** | Fresh adoptions may need initial config through the UI before `rest/device` PUT works for radio_table. |
 | **`forget-sta` is slow** | Takes up to 5 minutes to complete. Don't assume it failed if the client still appears briefly. |
+| **Spectrum scan data is empty by default** | Most APs return an empty `spectrum_table` until a scan is triggered via the UI. Only U7 Pro Max, U7 Pro XGS, E7, and E7 Campus have dedicated scanning radios for continuous data — and even those may need a UI-triggered scan to start. Manual scans take the AP offline briefly. |
 
 ---
 

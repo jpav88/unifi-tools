@@ -7,7 +7,11 @@ All notable changes to the UniFi network configuration are documented here.
 ### Added
 - **v2 API support** in `unifi_auth.sh` — new base path and `unifi_get_v2`/`unifi_post_v2` helpers
 - **`unifi_ap_stats.sh`** — historical per-AP client counts and traffic (5min/hourly/daily). Summary by default, `--timeline` for full detail.
-- **`unifi_spectrum.sh`** — RF spectrum scan viewer with best/worst channel recommendations per radio
+- **`unifi_spectrum.sh`** — RF spectrum scan viewer with best/worst channel recommendations per radio. Documents 3-tier scanning model (dedicated radio vs manual scan vs unsupported).
+- **`unifi_wifi_check.sh`** — full Wi-Fi health audit: weak signal, high retries, co-channel interference, channel utilization, WLAN config issues
+- **`unifi_bandwidth.sh`** — per-client bandwidth usage sorted by total traffic. Find the bandwidth hog.
+- **`unifi_new_devices.sh`** — detect unknown devices against a known-devices list (`--learn` to seed, then run periodically)
+- **`unifi_channel_plan.sh`** — validate channel assignments against spectrum scan data from all APs, flag co-channel and interference
 - **`unifi_write.sh rename`** — set client display name via `upd/user` partial update (avoids 403 on `rest/user`)
 - **`unifi_write.sh poe_cycle`** — remotely power-cycle a PoE switch port to reboot an AP
 - **[UniFi API Reference](docs/unifi-api-reference.md)** — comprehensive v1+v2 API guide with curl examples and known gotchas

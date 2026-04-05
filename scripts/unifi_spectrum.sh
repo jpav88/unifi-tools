@@ -6,8 +6,11 @@ set -euo pipefail
 #   band: ng (2.4GHz), na (5GHz), 6e (default: all)
 #   width: 20, 40, 80, 160, 320 (default: 20 for primary channel view)
 #
-# Data comes from the controller's cached spectrum scans (runs periodically).
-# To trigger a fresh scan, use the UI's RF Scan feature.
+# Spectrum data availability depends on AP model:
+#   Dedicated scanning radio (U7 Pro Max, U7 Pro XGS, E7): continuous background data
+#   All other APs: data only appears after a manual scan via the UI
+#     (Devices > AP > Insights > RF Environment > Scan)
+#     WARNING: Manual scans take the AP offline briefly — run during off-hours
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/unifi_auth.sh"
 
@@ -40,6 +43,20 @@ RESULT=$(unifi_get "stat/spectrum-scan/${NORM_MAC}" 2>/dev/null) || true
 
 if [[ -z "$RESULT" ]] || ! echo "$RESULT" | jq -e '.data[0].scans' >/dev/null 2>&1; then
     echo "ERROR: No spectrum data available for ${AP_NAME}" >&2
+    echo "  Spectrum scans may need to be triggered via the UniFi UI:" >&2
+    echo "  Devices > ${AP_NAME} > Insights > RF Environment > Scan" >&2
+    unifi_logout
+    exit 1
+fi
+
+# Check if spectrum_table is actually populated
+ENTRY_COUNT=$(echo "$RESULT" | jq '[.data[0].scans[].spectrum_table | length] | add')
+if [[ "$ENTRY_COUNT" -eq 0 ]]; then
+    echo "ERROR: ${AP_NAME} has scan structure but no spectrum data collected yet." >&2
+    echo "  Trigger a scan in the UniFi UI: Devices > ${AP_NAME} > Insights > RF Environment > Scan" >&2
+    echo "  Note: Only U7 Pro Max, U7 Pro XGS, E7/E7 Campus have dedicated scanning radios" >&2
+    echo "  that collect data continuously. All other APs need a manual UI-triggered scan." >&2
+    echo "  WARNING: Manual scans briefly take the AP offline." >&2
     unifi_logout
     exit 1
 fi

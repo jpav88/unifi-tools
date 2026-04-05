@@ -71,6 +71,15 @@ All in `scripts/`, all handle auth automatically via `unifi_auth.sh`. Supports b
 | `unifi_spectrum.sh` | RF spectrum scan data | `./scripts/unifi_spectrum.sh <mac> [ng\|na\|6e\|all]` |
 | `unifi_snapshot.sh` | Full baseline snapshot | `./scripts/unifi_snapshot.sh` |
 
+### Network Analysis
+
+| Script | Purpose | Usage |
+|--------|---------|-------|
+| `unifi_wifi_check.sh` | Full Wi-Fi health audit | `./scripts/unifi_wifi_check.sh` |
+| `unifi_bandwidth.sh` | Per-client bandwidth usage | `./scripts/unifi_bandwidth.sh [hours=24] [top_n=20]` |
+| `unifi_new_devices.sh` | Detect unknown devices | `./scripts/unifi_new_devices.sh [--learn\|--all]` |
+| `unifi_channel_plan.sh` | Channel plan validation | `./scripts/unifi_channel_plan.sh [na\|ng\|6e\|all]` |
+
 ### Write Operations
 
 ```bash
@@ -115,6 +124,22 @@ Radio bands: `ng` = 2.4GHz, `na` = 5GHz, `6e` = 6GHz
 
 # Remotely reboot an AP by power-cycling its switch port
 ./scripts/unifi_write.sh poe_cycle <switch_mac> 4
+
+# Full Wi-Fi health audit — checks signal, retries, co-channel, WLAN config
+./scripts/unifi_wifi_check.sh
+
+# Who's using all the bandwidth? (last 24h, top 20 clients)
+./scripts/unifi_bandwidth.sh
+
+# Who's hogging bandwidth RIGHT NOW? (last hour)
+./scripts/unifi_bandwidth.sh 1
+
+# Any unknown devices on the network?
+./scripts/unifi_new_devices.sh --learn    # first run: seed known devices
+./scripts/unifi_new_devices.sh            # subsequent: flag unknowns
+
+# Validate your channel plan against RF spectrum data
+./scripts/unifi_channel_plan.sh
 ```
 
 ## Remote Syslog Receiver
