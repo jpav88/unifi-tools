@@ -1,0 +1,34 @@
+# Auth / secrets
+/tmp/unifi_cookies.txt
+*.cookies
+.env
+
+# Local device config (MACs, IPs — not for public repo)
+/local/*
+!/local/devices.sh.example
+
+# Snapshots (contain device-specific data, regenerated per session)
+/snapshots/
+
+# Controller config backups (full config incl. PII — never commit or publish)
+/backups/
+
+# Port-counter samples + cron logs (runtime data, device-specific)
+/data/
+
+# Screenshots
+/Tmpscreenshots/
+
+# Debug output (regenerated per session)
+/debug/
+
+# Claude internals (except skills which are project config)
+.claude/*
+!.claude/skills/
+
+# OS
+.DS_Store
+
+# Gamer diagnostic drop folder (game logs w/ friend IP + Steam/Epic IDs, screenshots, generated guides)
+/GameLogs/
+__pycache__/
