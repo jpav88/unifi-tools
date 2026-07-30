@@ -20,7 +20,30 @@ All notable changes to the UniFi network configuration are documented here.
 - **A stale global permission rule** pointed at `/Users/pavdog/Programming/unifi`
   (pre-`Programming-pavdog` path), so it could never match and every script run prompted.
 
+### Fixed
+- **`pgit_publish.sh` silently withheld files, and reported success anyway.** `~/.gitignore_global`
+  lists `.claude/` and `CLAUDE.md`. In the private repo those paths are tracked, so the rules
+  never applied — but the publisher copies into a *fresh clone* where they are untracked, so
+  `git add -A` skipped them while still printing `✅ Synced 39 files` and a clean-looking
+  `git diff --cached --stat`. **The public mirror never contained the 5 skills** even though
+  `README.md` advertised `.claude/skills/` as a feature. Identical failure mode to the
+  `memory-backup/MEMORY.md` bug above — that fix guarded `sync_memory_backup.sh` and was never
+  carried over here. Now: `git add -f .claude/skills`, plus a guard that verifies every copied
+  file actually got staged and **aborts** otherwise, naming the files. Negative-tested against
+  a simulated global ignore, not just observed to pass.
+- The mirror's script inventory was never the subset it appeared to be: **all 22 scripts have
+  always been published**, differing only in scrubbed *content*. Worth stating plainly, because
+  assuming otherwise is what let a hardcoded MAC reach the public repo in the first place.
+
 ### Changed
+- **`CLAUDE.md` is now an explicit publish exclusion.** It was already absent from the mirror,
+  but by accident (global gitignore) rather than by choice; the guard above would otherwise
+  flag it. It stays private deliberately: it is Claude's local operating instructions, not
+  documentation anyone else can use, and it is the file most likely to accumulate household
+  detail over time. `README.md` is the public entry point.
+- **The 5 Claude Code skills are now published** — they are what makes the public repo usable,
+  and `README.md` already documented them. Verified scrubbed: `$IPAD_PRIMARY` →
+  `$IPAD_PRIMARY`, `my_network` → `my_network`, no MACs, names or hostnames in any of the five.
 - **Deduplicated the slash commands onto the project skills.** `.claude/skills/` is **not** dead
   weight despite being invisible to Claude's own skill listing — all 5 skills set
   `disable-model-invocation: true`, making them user-invocable only, so absence from that
