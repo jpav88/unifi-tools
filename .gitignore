@@ -32,3 +32,9 @@
 # Gamer diagnostic drop folder (game logs w/ friend IP + Steam/Epic IDs, screenshots, generated guides)
 /GameLogs/
 __pycache__/
+
+# ~/.gitignore_global ignores MEMORY.md everywhere (it is normally Claude's live
+# working file). The COPY inside memory-backup/ is a deliberate backup and must be
+# tracked — without this negation the index file, the most important one in the
+# mirror, is silently excluded while the other 43 commit fine.
+!memory-backup/MEMORY.md

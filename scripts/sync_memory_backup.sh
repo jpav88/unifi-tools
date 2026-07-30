@@ -51,3 +51,17 @@ EOF
 
 count=$(find "$DEST" -name '*.md' -type f | wc -l | tr -d ' ')
 echo "Mirrored ${count} memory file(s) -> memory-backup/"
+
+# A mirrored file that git ignores is worse than no mirror: it looks backed up and isn't.
+# This bit us on day one — ~/.gitignore_global ignores MEMORY.md everywhere, so the index
+# file was silently dropped while the other 43 committed cleanly. Fixed with a negation in
+# .gitignore; this check makes any future recurrence loud.
+# --no-index is required: without it check-ignore stays silent for files already in the
+# index, so a rule that would drop a file on a fresh clone reads as "fine" here.
+ignored=$(cd "$ROOT" && git check-ignore --no-index memory-backup/*.md 2>/dev/null || true)
+if [[ -n "$ignored" ]]; then
+    echo "WARNING: these mirrored files are gitignored and will NOT be backed up:" >&2
+    echo "$ignored" | sed 's/^/  /' >&2
+    echo "Add a '!<path>' negation to .gitignore." >&2
+    exit 1
+fi

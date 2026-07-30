@@ -2,7 +2,54 @@
 
 All notable changes to the UniFi network configuration are documented here.
 
+## [2026-07-29]
+
+### Fixed
+- **The `PostToolUse` shellcheck hook had never run once.** It read `$TOOL_INPUT`, which is
+  only defined for `prompt`-type hooks — `command` hooks receive their payload as JSON on
+  **stdin**. `$TOOL_INPUT` expanded to empty, so `file_path` was always empty and the `*.sh`
+  test never matched: every `.sh` edit since the hook was added went unlinted, silently.
+  Now `jq -r '.tool_input.file_path // .tool_response.filePath // empty'` reading stdin.
+  Verified end-to-end by piping a real hook payload into both versions — the old one emits
+  nothing regardless of file content. Fixed in `.claude/settings.json` (live) and
+  `hooks.example.json` (the tracked template carried the same bug, plus a wrong
+  `.file_path` instead of `.tool_input.file_path`).
+- **`PreCompact` advertised an incomplete command list** — it omitted `/unifi-diagnose`.
+  A hook that names the wrong commands is worse than one that names none: it survives
+  compaction and misdirects the next turn.
+- **A stale global permission rule** pointed at `/Users/pavdog/Programming/unifi`
+  (pre-`Programming-pavdog` path), so it could never match and every script run prompted.
+
+### Changed
+- **Deduplicated the slash commands onto the project skills.** `.claude/skills/` is **not** dead
+  weight despite being invisible to Claude's own skill listing — all 5 skills set
+  `disable-model-invocation: true`, making them user-invocable only, so absence from that
+  listing is not evidence a skill is broken. The three names also present in
+  `~/.claude/commands/` (`unifi-ap-health`, `unifi-client-history`, `unifi-find-ipad`) were
+  pruned to `~/.claude/commands.pruned-dupes-20260729/`; `/unifi-diagnose` stays global (no
+  project counterpart, and it probes for the repo so it works from any directory).
+  The project skills are the better copies: they source `ap_list` / `$IPAD_PRIMARY` from
+  gitignored `local/devices.sh`, whereas the global `unifi-find-ipad` hardcoded a **stale
+  rotated iPad MAC** (`xx:xx:xx:xx:xx:xx`, matching no current device) and the global
+  `unifi-ap-health` hardcoded four AP MACs while **omitting U7 Pro Max**.
+- **Ported the global ap-health analysis into `.claude/skills/unifi-ap-health/`** so pruning lost
+  nothing: per-AP client counts + RSSI distribution, offline/recent-reboot and zero-client
+  flags, sub-1000 Mbps AP uplink flag, and the `cu_self_tx` interpretation rule.
+  `unifi_wifi_check.sh` is suggested as a follow-up rather than run inline — **each `!`cmd`` in a
+  skill is a separate login**, and a third would risk the 429 throttle.
+- `CLAUDE.md`'s skills table now lists all six commands with their location, and records the
+  `disable-model-invocation` and one-login-per-`!`cmd`` constraints.
+
 ## [2026-07-27]
+
+### Fixed
+- **`memory-backup/MEMORY.md` was silently excluded from the backup.** `~/.gitignore_global`
+  ignores `MEMORY.md` everywhere, so the mirror committed 43 files cleanly while dropping the
+  index that ties them together — the single most important file, and nothing surfaced it.
+  Added a `!memory-backup/MEMORY.md` negation, and `sync_memory_backup.sh` now fails with a
+  clear message if any mirrored file is gitignored (`git check-ignore --no-index`; without
+  `--no-index` it stays silent for files already in the index, which is how the first version
+  of this check passed while the bug was live).
 
 ### Changed
 - **The per-client audit script was renamed to `unifi_client_audit.sh`** and de-personalised. It hardcoded
