@@ -2,6 +2,27 @@
 
 All notable changes to the UniFi network configuration are documented here.
 
+## [2026-09-04]
+
+### Fixed (scripts)
+- **`unifi_events.sh` returned events far outside the requested window** ("8h" yielded
+  entries back to July). The v2 `system-log` API ignores the `start`/`end` window in the
+  request body, and the script trusted it — sorting and limiting but never filtering by
+  time. Now enforces the window client-side (`select(.time_epoch_ms >= START_MS)`) before
+  sort/limit. *(The old memory note calling v2 `system-log` "untried" was stale — it was
+  already the primary path; the real gap was the missing client-side filter.)*
+- **`unifi_write.sh` kick/block/unblock sent the raw MAC** instead of normalizing to
+  lowercase like every other subcommand — an uppercase MAC would 400. Now runs it through
+  `normalize_mac`. *(NOTE: this is not the whole story of the "kick 400" — `kick-sta` also
+  400s for a station that isn't currently associated; both the wrapper and an identical raw
+  POST return 400 on an offline MAC, disproving the old "wrapper arg-passing bug, raw works"
+  theory. Verified against a live connected client separately.)*
+
+### Changed (scripts)
+- **Removed a dead `ISSUES="[]"` assignment** (`unifi_wifi_check.sh:28`, SC2034). It was a
+  leftover from an abandoned incremental-append design; the report is built fresh via
+  `jq -n` from the per-check arrays (`ALL_ISSUES`), so the variable was never read.
+
 ## [2026-07-29]
 
 ### Fixed

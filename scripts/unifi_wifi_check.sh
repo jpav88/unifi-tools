@@ -25,8 +25,6 @@ WLANS=$(unifi_get "rest/wlanconf")
 # Build AP name lookup
 AP_NAMES=$(echo "$DEVICES" | jq '[.data[] | select(.type != "usw") | {(.mac): (.name // .mac)}] | add // {}')
 
-ISSUES="[]"
-
 # --- Check 1: Weak signal clients ---
 WEAK=$(echo "$CLIENTS" | jq --argjson aps "$AP_NAMES" '
     [.data[] | select(.is_wired == false and .signal != null and .signal < -70) | {

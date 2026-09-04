@@ -463,7 +463,10 @@ elif [[ "$CMD" == "radio" ]]; then
 elif resolved=$(_resolve_cmd "$CMD"); then
     validate_mac "$ARG" || exit 1
     read -r api_path api_cmd <<< "$resolved"
-    unifi_post "$api_path" "$(jq -n --arg mac "$ARG" --arg cmd "$api_cmd" \
+    # stamgr/devmgr expect a lowercase MAC — normalize like every other command
+    # (a raw uppercase MAC 400s here). kick-sta also requires the station to be
+    # currently associated; an offline MAC returns HTTP 400 by design.
+    unifi_post "$api_path" "$(jq -n --arg mac "$(normalize_mac "$ARG")" --arg cmd "$api_cmd" \
         '{cmd: $cmd, mac: $mac}')" | jq '.meta'
 else
     echo "Unknown command: $CMD" >&2

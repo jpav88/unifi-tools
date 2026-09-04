@@ -69,8 +69,11 @@ for cls in "${CLASSES[@]}"; do
 done
 
 if [[ "$V2_OK" == true ]]; then
-    # Sort by time descending, limit output
-    echo "$V2_RESULTS" | jq --argjson lim "$LIMIT" 'sort_by(.time) | reverse | .[:$lim]'
+    # The v2 system-log API ignores the start/end window in the request body and
+    # returns events far older than asked (e.g. "8h" yielding months-old entries),
+    # so enforce the window client-side on the event timestamp before sorting/limiting.
+    echo "$V2_RESULTS" | jq --argjson lim "$LIMIT" --argjson start "$START_MS" \
+        'map(select((.time_epoch_ms // 0) >= $start)) | sort_by(.time) | reverse | .[:$lim]'
 else
     # Fall back to v1 stat/event (POST, may return empty on some firmware)
     echo "# v2 system-log returned no data, falling back to stat/event" >&2
