@@ -278,8 +278,8 @@ All notable changes to the UniFi network configuration are documented here.
 - **Multicast DNS enabled** globally (Settings → Networks; was off) — required for
   HomeKit/Bonjour discovery across wired↔wireless. NOTE: this setting silently
   rejects API writes (`rc: ok` but value reverts, classic + v2 API) — UI-only.
-- **Fixed-IP reservations**: added ESP32 Garage Ruuvi Gateway (.111) and James iPad
-  (.100); re-reserved James iPhone (.161) under its new private MAC after a WiFi
+- **Fixed-IP reservations**: added ESP32 Garage Ruuvi Gateway (.111) and the primary iPad
+  (.100); re-reserved the primary iPhone (.161) under its new private MAC after a WiFi
   forget/rejoin rotated the old one; forgot 3 stale entries (old iPhone MAC + two
   unnamed offline ghosts at .170/.197) via `cmd/stamgr forget-sta`.
 
