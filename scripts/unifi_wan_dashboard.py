@@ -163,6 +163,83 @@ def wan_info():
     return {"ip": row[1], "since": int(row[0]), "changed_24h": changed_24h}
 
 
+PORT_CSV = Path(__file__).resolve().parent.parent / "data" / "port_samples.csv"
+# Which sampled ports to surface, in display order. name matches the CSV "target"
+# column (unifi_port_sample.sh TARGETS). client_facing flips the byte orientation:
+# on an access port (Gamer) the switch RECEIVES his upload and TRANSMITS his download,
+# so download = tx; on the WAN uplink it's the reverse (download = rx from the ISP).
+PORT_TARGETS = [
+    ("Gamer", "Gaming PC — UDR7 port 1", True),
+    ("WAN", "WAN uplink — UDR7 port 4", False),
+]
+
+
+def load_port_samples(hours):
+    """Per-interval deltas from data/port_samples.csv, matching unifi_port_sample.sh.
+
+    Points are [epoch, hm, dn_mbps, up_mbps, rx_drop, tx_drop, rx_err, tx_err] for
+    intervals ending inside the window (the delta needs the prior raw sample, which may
+    predate it). Throughput is None across a counter reset/gap so the panel shows a break
+    instead of a bogus spike. dn/up are from the CLIENT's perspective (see client_facing).
+    RX drops + any errors are the real signal; TX (egress) drops are usually benign
+    broadcast/queue suppression, so they're tracked separately and don't fail the port.
+    """
+    import csv
+    if not PORT_CSV.exists():
+        return {"present": False}
+    cutoff = int(time.time() - hours * 3600)
+    rows_by_t = collections.defaultdict(list)   # target -> raw dicts, in file order
+    try:
+        with PORT_CSV.open(newline="") as fh:
+            for r in csv.DictReader(fh):
+                try:
+                    rows_by_t[r["target"]].append({
+                        "ep": int(r["epoch"]), "hm": r["iso_local"][11:16],
+                        "rxb": int(r["rx_bytes"]), "txb": int(r["tx_bytes"]),
+                        "rxd": int(r["rx_dropped"]), "txd": int(r["tx_dropped"]),
+                        "rxe": int(r["rx_errors"]), "txe": int(r["tx_errors"]),
+                    })
+                except (KeyError, ValueError):
+                    continue
+    except OSError:
+        return {"present": False}
+
+    out = {}
+    for name, label, client_facing in PORT_TARGETS:
+        raw = rows_by_t.get(name)
+        if not raw:
+            continue
+        pts = []
+        tot = {"rx_drop": 0, "tx_drop": 0, "rx_err": 0, "tx_err": 0}
+        peak_dn = peak_up = 0.0
+        for i in range(1, len(raw)):
+            a, b = raw[i - 1], raw[i]
+            if b["ep"] < cutoff:
+                continue
+            secs = b["ep"] - a["ep"]
+            if secs <= 0:
+                continue
+            reset = b["rxb"] < a["rxb"] or b["txb"] < a["txb"]
+            dn = up = None
+            if not reset:
+                rx_mbps = (b["rxb"] - a["rxb"]) * 8 / secs / 1e6
+                tx_mbps = (b["txb"] - a["txb"]) * 8 / secs / 1e6
+                # client's download = what the switch transmits toward it (tx); reversed on an uplink
+                dn, up = (tx_mbps, rx_mbps) if client_facing else (rx_mbps, tx_mbps)
+                peak_dn, peak_up = max(peak_dn, dn), max(peak_up, up)
+            rxd = max(0, b["rxd"] - a["rxd"]); txd = max(0, b["txd"] - a["txd"])
+            rxe = max(0, b["rxe"] - a["rxe"]); txe = max(0, b["txe"] - a["txe"])
+            tot["rx_drop"] += rxd; tot["tx_drop"] += txd
+            tot["rx_err"] += rxe; tot["tx_err"] += txe
+            pts.append([b["ep"], b["hm"],
+                        None if dn is None else round(dn, 1),
+                        None if up is None else round(up, 1), rxd, txd, rxe, txe])
+        tot["peak_dn"] = round(peak_dn, 1)
+        tot["peak_up"] = round(peak_up, 1)
+        out[name] = {"label": label, "points": pts, "totals": tot}
+    return {"present": True, "interval_min": 15, "targets": out}
+
+
 _FG_TS = re.compile(r'^\[(\d{4})\.(\d{2})\.(\d{2})-(\d{2})\.(\d{2})\.(\d{2}):\d+\]')
 _FG_IP = re.compile(r'\[::ffff:([0-9.]+)\]:\d+')
 
@@ -565,6 +642,12 @@ canvas{width:100%;height:220px;display:block}
     <li><b>If it's ever bad (C/D):</b> the fix is enabling <b>Smart Queues / SQM (FQ-CoDel)</b> on the UDR7, which caps the buffer and keeps latency low even when the link is full — at the cost of a little peak throughput.</li>
   </ul>
 </div>
+<div class="notes" id="portpanel">
+  <div class="chdr" style="margin-bottom:4px"><h3 style="margin:0">the gamer's port — throughput, drops &amp; errors</h3>
+    <div class="seg" id="portseg"><button data-h="6">6h</button><button data-h="24" class="on">24h</button><button data-h="72">3d</button><button data-h="168">7d</button></div></div>
+  <p style="color:var(--dim);margin:2px 0 0">Sampled every 15&nbsp;min straight from the UDR7 switch-port counters. This is his wired link itself — if it's clean while the game lags, the lag isn't his port. <b>Δdrop/Δerr</b> = new dropped/errored frames that interval (should stay 0); <b>dn/up</b> = Mbps that interval.</p>
+  <div id="portbody"><p style="color:var(--dim)">loading…</p></div>
+</div>
 <div class="notes" id="fganalysis"><h3>FactoryGame.log Analysis</h3><p style="color:var(--dim)">loading…</p></div>
 <div class="foot" id="foot"></div>
 <script>
@@ -580,6 +663,44 @@ async function refreshAll(){
   renderMeta(meta);
   for(const c of CH){ const j=await getData(chartHours[c.id]); chart(c.id,j.data,c.idx,c.loss); }
   loadFG();
+  loadPort();
+}
+let portHours=24;
+async function loadPort(){
+  const el=document.getElementById('portbody');
+  let a; try{ a=await (await fetch('/api/port?hours='+portHours)).json(); }catch(e){ return; }
+  if(!a.present||!a.targets||!Object.keys(a.targets).length){
+    el.innerHTML='<p style="color:var(--dim)">No port samples yet — <code>unifi_port_sample.sh</code> writes every 15&nbsp;min.</p>'; return; }
+  let h='';
+  for(const name of Object.keys(a.targets)){
+    const t=a.targets[name], to=t.totals;
+    const errs=to.rx_err+to.tx_err;
+    // real signal = ingress drops + any errors; egress (tx) drops are usually benign
+    const clean=to.rx_drop===0&&errs===0;
+    h+=`<div style="margin-top:14px"><b>${esc(t.label)}</b> `+
+       `<span class="fgv ${clean?'clean':'network'}" style="font-size:12px">${clean?'CLEAN — 0 ingress drops / 0 errors':(to.rx_drop+' ingress drops · '+errs+' errors')}</span></div>`;
+    h+=`<div class="fgstat">`+
+      `<div class="s"><div class="l">Peak download</div><div class="v ok">${to.peak_dn} <span style="font-size:12px;color:var(--dim)">Mbps</span></div><div class="l">busiest 15-min interval</div></div>`+
+      `<div class="s"><div class="l">Peak upload</div><div class="v ok">${to.peak_up} <span style="font-size:12px;color:var(--dim)">Mbps</span></div><div class="l">busiest 15-min interval</div></div>`+
+      `<div class="s"><div class="l">Errors (window)</div><div class="v ${errs?'warn':'ok'}">${errs}</div><div class="l">rx ${to.rx_err} · tx ${to.tx_err}</div></div>`+
+      `<div class="s"><div class="l">Drops (window)</div><div class="v ${to.rx_drop?'warn':'ok'}">${to.rx_drop} <span style="font-size:12px;color:var(--dim)">in</span></div><div class="l">+ ${to.tx_drop} egress (usually benign)</div></div>`+
+      `</div>`;
+    const pts=t.points.slice(-48).reverse();
+    if(pts.length){
+      h+=`<div style="max-height:260px;overflow:auto"><table class="fgtl"><tr><th>Time</th><th style="text-align:right">↓ Mbps</th><th style="text-align:right">↑ Mbps</th><th style="text-align:right">drop in/out</th><th style="text-align:right">err</th></tr>`;
+      for(const p of pts){
+        const rxd=p[4],txd=p[5],err=p[6]+p[7];
+        const bad=rxd>0||err>0;   // ingress drop or any error highlights the row
+        h+=`<tr${bad?' style="background:#2a1a0e"':''}><td>${esc(p[1])}</td>`+
+           `<td style="text-align:right">${p[2]==null?'—':p[2].toFixed(1)}</td>`+
+           `<td style="text-align:right">${p[3]==null?'—':p[3].toFixed(1)}</td>`+
+           `<td style="text-align:right"><span style="${rxd>0?'color:#f87171;font-weight:700':''}">${rxd}</span><span style="color:var(--dim)"> / ${txd}</span></td>`+
+           `<td style="text-align:right${err>0?';color:#f87171;font-weight:700':''}">${err}</td></tr>`;
+      }
+      h+=`</table></div>`;
+    }
+  }
+  el.innerHTML=h;
 }
 function esc(s){return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}
 async function loadFG(){
@@ -800,6 +921,11 @@ document.querySelectorAll('.seg').forEach(seg=>{
     const c=CH.find(c=>c.id===id); const j=await getData(chartHours[id],true); chart(id,j.data,c.idx,c.loss);
   });
 });
+document.getElementById('portseg').addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(!b)return;
+  document.querySelectorAll('#portseg button').forEach(x=>x.classList.remove('on')); b.classList.add('on');
+  portHours=+b.dataset.h; loadPort();
+});
 document.getElementById('refresh').onclick=refreshAll;
 function loop(){refreshAll();clearInterval(timer);timer=setInterval(refreshAll,20000);}
 loop();
@@ -839,6 +965,10 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, body, "application/json")
         elif u.path == "/api/factorygame":
             self._send(200, json.dumps(analyze_factorygame_log()).encode(), "application/json")
+        elif u.path == "/api/port":
+            q = parse_qs(u.query)
+            hours = max(1.0, min(float(q.get("hours", ["24"])[0]), 168))
+            self._send(200, json.dumps(load_port_samples(hours)).encode(), "application/json")
         elif u.path in ("/", "/index.html"):
             html = (PAGE
                     .replace("__TIERS__", json.dumps([[t[0], t[1], t[2]] for t in TIERS]))
