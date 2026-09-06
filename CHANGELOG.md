@@ -2,6 +2,26 @@
 
 All notable changes to the UniFi network configuration are documented here.
 
+## [2026-09-05]
+
+### Added (scripts)
+- **`unifi_wan_dashboard.py` — Gamer port panel** (`/api/port` route + panel). Reads
+  `data/port_samples.csv` (the existing 15-min cron sampler) and shows the gamer's switch-port
+  throughput, ingress/egress drops and errors over 6h/24h/3d/7d — zero extra controller
+  logins. Fixes the switch-port byte orientation *per target*: a client-access port's
+  download is the port's `tx` (the reverse of the WAN uplink), so the gamer's peak download now
+  agrees with the WAN tier. RX drops + errors are the real signal; benign egress (TX) drops
+  are tracked and shown separately so they don't false-flag the port.
+- **`probe_gameserver.sh`** — disposable, on-demand latency/path probe to a specific game
+  server (geo + 20-ping + traceroute, or `--watch [min] [sec]` to sample a window and print
+  a verdict). Deliberately NOT wired into the dashboard/monitor: game-server IPs change on
+  wipes/server-hops, so a hardcoded tier would rot and false-alarm when nobody's playing.
+
+### Context
+- Gamer Rust-lag investigation: home link, LAN, Frontier path, and the route to his actual
+  server (`205.178.168.52`, Rusty Moose Dallas) all measured clean — a full hour of probing
+  held ~14.5 ms / 0% loss / <2 ms jitter. Diagnosis: server-side (server FPS), not the network.
+
 ## [2026-09-04]
 
 ### Fixed (scripts)
